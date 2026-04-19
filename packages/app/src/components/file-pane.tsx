@@ -4,6 +4,7 @@ import Markdown, { MarkdownIt } from "react-native-markdown-display";
 import {
   ActivityIndicator,
   Image as RNImage,
+  Pressable,
   ScrollView as RNScrollView,
   Text,
   View,
@@ -23,6 +24,7 @@ import {
 } from "@getpaseo/highlight";
 import { lineNumberGutterWidth } from "@/components/code-insets";
 import { isRenderedMarkdownFile } from "@/components/file-pane-render-mode";
+import { SpinningRefreshIcon } from "@/components/spinning-refresh-icon";
 import { isWeb } from "@/constants/platform";
 import { createMarkdownStyles } from "@/styles/markdown-styles";
 
@@ -58,6 +60,14 @@ function formatFileSize({ size }: { size: number }): string {
     return `${(size / 1024).toFixed(1)} KB`;
   }
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileName(filePath: string): string {
+  const normalizedPath = filePath.trim();
+  if (normalizedPath.length === 0) {
+    return "Untitled";
+  }
+  return normalizedPath.split("/").filter(Boolean).pop() ?? normalizedPath;
 }
 
 const CodeLine = React.memo(function CodeLine({
@@ -275,10 +285,12 @@ export function FilePane({
 }) {
   const isMobile = useIsCompactFormFactor();
   const showDesktopWebScrollbar = isWeb && !isMobile;
+  const { theme } = useUnistyles();
 
   const client = useSessionStore((state) => state.sessions[serverId]?.client ?? null);
   const normalizedWorkspaceRoot = useMemo(() => workspaceRoot.trim(), [workspaceRoot]);
   const normalizedFilePath = useMemo(() => trimNonEmpty(filePath), [filePath]);
+  const fileName = useMemo(() => getFileName(filePath), [filePath]);
 
   const query = useQuery({
     queryKey: ["workspaceFile", serverId, normalizedWorkspaceRoot, normalizedFilePath],
@@ -300,6 +312,37 @@ export function FilePane({
 
   return (
     <View style={styles.container} testID="workspace-file-pane">
+      <View style={styles.header} testID="workspace-file-pane-header">
+        <View style={styles.headerText}>
+          <Text numberOfLines={1} style={styles.headerTitle}>
+            {fileName}
+          </Text>
+          <Text numberOfLines={1} style={styles.headerSubtitle}>
+            {filePath}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => void query.refetch()}
+          disabled={query.isFetching}
+          hitSlop={8}
+          style={({ hovered, pressed }) => [
+            styles.refreshButton,
+            query.isFetching && styles.refreshButtonDisabled,
+            (hovered || pressed) && styles.refreshButtonHovered,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh file"
+          testID="workspace-file-pane-refresh"
+        >
+          <SpinningRefreshIcon
+            spinning={query.isFetching}
+            size={theme.iconSize.sm}
+            color={theme.colors.foregroundMuted}
+          />
+          <Text style={styles.refreshButtonText}>Refresh</Text>
+        </Pressable>
+      </View>
+
       {query.data?.error ? (
         <View style={styles.centerState}>
           <Text style={styles.errorText}>{query.data.error}</Text>
@@ -322,6 +365,52 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minHeight: 0,
     backgroundColor: theme.colors.surface0,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[3],
+    paddingHorizontal: theme.spacing[4],
+    paddingVertical: theme.spacing[3],
+    borderBottomWidth: theme.borderWidth[1],
+    borderBottomColor: theme.colors.border,
+    backgroundColor: theme.colors.surface1,
+  },
+  headerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTitle: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
+  headerSubtitle: {
+    marginTop: theme.spacing[1],
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.xs,
+  },
+  refreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.full,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
+  },
+  refreshButtonHovered: {
+    backgroundColor: theme.colors.surface2,
+  },
+  refreshButtonDisabled: {
+    opacity: 0.6,
+  },
+  refreshButtonText: {
+    color: theme.colors.foregroundMuted,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
   },
   centerState: {
     flex: 1,
